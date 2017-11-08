@@ -4,112 +4,100 @@ require './models/reader'
 require './models/author'
 
 class Library
-  def initialize(books, orders, readers, authors)
-    @books = books
-    @orders = orders
-    @readers = readers
-    @authors = authors
-    File.open("library.txt", "a+") do |f|
-      f.write("#{File.path("books.txt")} - books\n")
-      f.write("#{File.path("readers.txt")} - readers\n")
-      f.write("#{File.path("orders.txt")} - orders\n")
-    end
-  end
   attr_accessor :books, :orders, :readers, :authors
+  def initialize(books=nil, orders=nil, readers=nil, authors=nil)
+    @books   = []
+    @orders  = []
+    @readers = []
+    @authors = []
+    begin
+      @books   = Marshal.load(File.read('books.txt'))   if !Marshal.load(File.read('books.txt')).empty?
+      @orders  = Marshal.load(File.read('orders.txt'))  if !Marshal.load(File.read('orders.txt')).empty?
+      @readers = Marshal.load(File.read('readers.txt')) if !Marshal.load(File.read('readers.txt')).empty?
+      @authors = Marshal.load(File.read('authors.txt')) if !Marshal.load(File.read('authors.txt')).empty?
+    rescue(ArgumentError) 
+    end
+      #Marshal.load(File.read('library.txt'))
+      #File.open('library.txt', 'w') {|f| f.write(Marshal.dump(m)) }
+  end
   #to do: @books << File.open("books.txt", "a+")
   #to do: orders+readers+books methods to one method
   #to do: txt to xls table
 
   def add_book(title, author)
     new_book = Book.new(title, author)
-    File.open("books.txt", "a+"){|f| f.write("#{new_book.title} | by #{new_book.author} | Added to library #{Time.now} \n")}
-    puts "======= New book have been added ======="
+    @books << new_book if find_book_by_title(title) == nil
+    File.open("books.txt", "w"){|f| f.write(Marshal.dump(@books)) }
   end
 
-  def books
-    puts "======= ALL BOOKS ======="
-    books = File.open("books.txt", "a+")
-    books.each_line do |line|
-      puts line
-    end
-    books.close
+  def print_books_all
+    @books.each_with_index {|book, index| p "#{index} | #{book}"}; nil
   end
 
-  def orders
-    puts "======= ALL orders ======="
-    counter = 1
-    orders = File.open("orders.txt", "a+")
-    orders.each_line do |line|
-      puts "#{counter}: #{line}"
-      counter = counter + 1
-    end
-    orders.close
+  def print_search_result
+    books.select {|book| book.title == book_title }.join
   end
 
-  def readers
-    puts "======= ALL readers ======="
-    readers = File.open("readers.txt", "a+")
-    readers.each_line do |line|
-      puts line
-    end
-    readers.close
+  def find_book_by_title(book_title)
+    books.select {|book| book.title == book_title }.first
   end
 
-  def find_book_by_title(search)
-    puts "======= Search Book ======="
-    @result = []
-    File.foreach("books.txt"){|x| @result << x if x.match(search)}
-    @result
+  def find_orders_by_book_title(book_title)
+    orders.select {|order| order.book.title == book_title }
   end
 
-  def order_the_book(book, reader)
-    order_book = find_book_by_title(book).take(1).join.chomp
-    order_reader = find_reader(reader).take(1).join.chomp
+  def order_the_book(book_title, reader_name)
+    order_book   = find_book_by_title(book_title)
+    order_reader = find_reader_by_name(reader_name)
     if order_book && order_reader
       new_order = Order.new(order_book, order_reader)
-      File.open("orders.txt", "a+"){|f| f.write("#{order_book} | #{order_reader} | #{Time.now.strftime("%Y-%d-%m")}\n")}
-      puts "======= New Order have been added ======="
+      @orders << new_order
+      File.open("orders.txt", "w"){|f| f.write(Marshal.dump(@orders)) }
     else
       puts "======= No such Book or Reader =========="
     end
   end
 
-  def find_reader(search)
-    @result = []
-    File.foreach("readers.txt"){|x| @result << x if x.match(search)}
-    @result
+  def find_reader_by_name(reader_name)
+    readers.select {|reader| reader.name == reader_name }.first
   end
 
   def add_reader(name, email, city, street, house)
-    if find_reader(name).empty? != true
-      reader = Reader.new(name, email, city, street, house)
-      File.open("readers.txt", "a+"){|f| f.write("#{reader.name} | #{reader.email} | #{reader.city} | #{reader.street} | #{reader.house}\n")}
-      puts "======= New Reader have been added ======="
+    if !find_reader_by_name(name)
+      new_reader = Reader.new(name, email, city, street, house)
+      @readers << new_reader
+      File.open("readers.txt", "w"){|f| f.write(Marshal.dump(@readers)) }
     else
       puts "This Reader already exists"
     end
   end
 
   def three_most_popular_books
-    puts "======= Three Most Popular Books ======="
-    most_popular = []
-    orders = File.open("orders.txt", "a+")
-    orders.each_line do |line|
-      most_popular << line.split(" | ")[0]
-    end
-    popular_hash = Hash[most_popular.uniq.map { |x| [x, most_popular.count(x)] }]
-    @three_most_freq = most_popular.sort_by { |x| popular_hash[x] }.last(3)
-    @most_freq = most_popular.sort_by { |x| popular_hash[x] }.last
-    orders.close
-    puts @three_most_freq
+    hsh = {}
+    orders.each {|order| hsh[order.book.title]||=0; hsh[order.book.title] += 1}
+    hsh.max(3)
   end
 
+  def random_book_name
+    books.each {|book| @books_titles_arr ||= []; @books_titles_arr << book.title}.shuffle.first.title
+  end
+
+  def random_reader_name
+    readers.each {|reader| @readers_names_arr ||= []; @readers_names_arr << reader.name}.shuffle.first.name
+  end
 
   def how_many_people_ordered_one_of_the_three_most_popular_books
+    top_books_titles = []
+    top_books_titles << three_most_popular_books[0][0]
+    top_books_titles << three_most_popular_books[1][0]
+    top_books_titles << three_most_popular_books[2][0]
+    top_books_titles.each do |book_title|
+      find_orders_by_book_title(book_title).each {|order| arrr << order.reader.name}
+    end
   end
 
   def what_is_the_most_popular_book
-    puts "======= The Most Popular Book ======="
-    puts @most_freq
+    three_most_popular_books
+    hsh.max
   end
 end

@@ -4,4 +4,9 @@ class Book
     @title = title
     @author = author
   end
+
+  def to_s
+    super
+    "#{self.title} | written by | #{self.author}"
+  end
 end
