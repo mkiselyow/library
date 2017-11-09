@@ -4,30 +4,27 @@ require './models/reader'
 require './models/author'
 
 class Library
-  attr_accessor :books, :orders, :readers, :authors
-  def initialize(books=nil, orders=nil, readers=nil, authors=nil)
-    @books   = []
-    @orders  = []
-    @readers = []
-    @authors = []
-    begin
-      @books   = Marshal.load(File.read('books.txt'))   if !Marshal.load(File.read('books.txt')).empty?
-      @orders  = Marshal.load(File.read('orders.txt'))  if !Marshal.load(File.read('orders.txt')).empty?
-      @readers = Marshal.load(File.read('readers.txt')) if !Marshal.load(File.read('readers.txt')).empty?
-      @authors = Marshal.load(File.read('authors.txt')) if !Marshal.load(File.read('authors.txt')).empty?
-    rescue(ArgumentError) 
-    end
-      #Marshal.load(File.read('library.txt'))
-      #File.open('library.txt', 'w') {|f| f.write(Marshal.dump(m)) }
-  end
-  #to do: @books << File.open("books.txt", "a+")
-  #to do: orders+readers+books methods to one method
-  #to do: txt to xls table
+  BOOKS   = 'books.txt'
+  ORDERS  = 'orders.txt'
+  READERS = 'readers.txt'
+  AUTHORS = 'authors.txt'
 
-  def add_book(title, author)
-    new_book = Book.new(title, author)
-    @books << new_book if find_book_by_title(title) == nil
-    File.open("books.txt", "w"){|f| f.write(Marshal.dump(@books)) }
+  attr_accessor :books, :orders, :readers, :authors
+
+  def initialize(books=[], orders=[], readers=[], authors=[])
+    @books   = books
+    @orders  = orders
+    @readers = readers
+    @authors = authors
+  end
+
+  def load_info
+    load_entities
+  end
+
+  def add_book(book)
+    @books << book if find_book_by_title(book.title) == nil
+    File.open(BOOKS, 'w'){|f| f.write(Marshal.dump(@books)) }
   end
 
   def print_books_all
@@ -52,7 +49,7 @@ class Library
     if order_book && order_reader
       new_order = Order.new(order_book, order_reader)
       @orders << new_order
-      File.open("orders.txt", "w"){|f| f.write(Marshal.dump(@orders)) }
+      File.open(ORDERS, "w"){|f| f.write(Marshal.dump(@orders)) }
     else
       puts "======= No such Book or Reader =========="
     end
@@ -66,7 +63,7 @@ class Library
     if !find_reader_by_name(name)
       new_reader = Reader.new(name, email, city, street, house)
       @readers << new_reader
-      File.open("readers.txt", "w"){|f| f.write(Marshal.dump(@readers)) }
+      File.open(READERS, "w"){|f| f.write(Marshal.dump(@readers)) }
     else
       puts "This Reader already exists"
     end
@@ -74,30 +71,51 @@ class Library
 
   def three_most_popular_books
     hsh = {}
-    orders.each {|order| hsh[order.book.title]||=0; hsh[order.book.title] += 1}
-    hsh.max(3)
+    orders.each do |order| 
+      hsh[order.book]||=0
+      hsh[order.book] += 1
+    end
+    @top_book         = hsh.max_by{|k,v| v}[0]
+    @top_three_books = hsh.max_by(3){|k,v| v}.to_h.keys
   end
 
-  def random_book_name
-    books.each {|book| @books_titles_arr ||= []; @books_titles_arr << book.title}.shuffle.first.title
+  def random_book_title
+    books.sample.title
   end
 
   def random_reader_name
-    readers.each {|reader| @readers_names_arr ||= []; @readers_names_arr << reader.name}.shuffle.first.name
+    readers.sample.name
   end
 
   def how_many_people_ordered_one_of_the_three_most_popular_books
-    top_books_titles = []
-    top_books_titles << three_most_popular_books[0][0]
-    top_books_titles << three_most_popular_books[1][0]
-    top_books_titles << three_most_popular_books[2][0]
-    top_books_titles.each do |book_title|
-      find_orders_by_book_title(book_title).each {|order| arrr << order.reader.name}
+    top_books = []
+    top_books << three_most_popular_books[0]
+    top_books << three_most_popular_books[1]
+    top_books << three_most_popular_books[2]
+    readers_who_read_popular_books = []
+    top_books.each do |book|
+      find_orders_by_book_title(book.title).each {|order| readers_who_read_popular_books << order.reader}
     end
+    readers_who_read_popular_books
   end
 
   def what_is_the_most_popular_book
     three_most_popular_books
-    hsh.max
+    @top_book
+  end
+
+  private
+
+  def load_entities
+    begin
+      @books   = Marshal.load(File.read(BOOKS))
+      @orders  = Marshal.load(File.read(ORDERS))
+      @readers = Marshal.load(File.read(READERS))
+      @authors = Marshal.load(File.read(AUTHORS))
+    rescue ArgumentError => e
+      puts "====================ArgumentError===================="
+      puts "#{e}. You have empty files with data"
+      puts "====================ArgumentError===================="
+    end
   end
 end
